@@ -1,0 +1,14 @@
+Design pattern - General solution to common Software design problems
+
+Its like a blueprint or template that you can modify to solve your particular problems
+
+Types of patterns
+1. Creational 
+2. Structural 
+3. Behavioral 
+
+Factory pattern - 
+
+Patterns that fall under the creational category are mainly about providing object creation mechanism that promote flexibility and reusability of code in situations where you have to create many objects
+
+In our case, A factory is an object that creates other objects
