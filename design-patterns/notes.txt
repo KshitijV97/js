@@ -8,7 +8,10 @@ Types of patterns
 3. Behavioral 
 
 Factory pattern - 
+1. Comes under the category of Creational patterns
+2. Patterns that fall under the creational category are mainly about providing object creation mechanism that promote flexibility and reusability of code in situations where you have to create many objects
+3. In our case, A factory is an object that creates other objects
 
-Patterns that fall under the creational category are mainly about providing object creation mechanism that promote flexibility and reusability of code in situations where you have to create many objects
-
-In our case, A factory is an object that creates other objects
+Singleton - 
+1. Comes under the category of Creational patterns
+2. Comes handy when you want to limit the instance of a Object to one
