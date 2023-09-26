@@ -1,0 +1,24 @@
+Programming tools choices?
+
+DOM vs Canvas vs SVG?
+
+Design system? Ant? MUI? 
+
+Library / Framework?
+
+State management?
+
+How will the game be real time multi player?? Web Sockets or SSE?
+
+How will game be offline?
+
+PvE instead of multiplayer?
+
+How can you convert this to a Micro frontend?
+
+Web vitals?
+
+Service worker vs Web worker?
+
+
+

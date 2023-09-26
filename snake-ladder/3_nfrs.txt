@@ -1,0 +1,26 @@
+Is the game online or offline?
+
+Is the game multiplayer or not?
+
+Performance?
+
+Accessibiity?
+
+Responsivenes?
+
+Secure from cheating?
+
+Localization / i18n ?
+
+Caching?
+
+Theming support?
+
+Logging / Monitoring?
+
+SEO?
+
+Voice chat feature?
+
+
+

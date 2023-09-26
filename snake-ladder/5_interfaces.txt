@@ -1,0 +1,41 @@
+Dice
+    - rollDice()
+
+Snake
+    - start
+    - end
+    - generateSnake(start, end)
+    - addSnake()
+    - nextPosition()
+
+
+Ladder
+    - start
+    - end
+    - generateLadder(start, end)
+    - addLadder()
+    - nextPosition()
+
+Player
+    - playerInfo
+    - currentPosition
+    - status (online / offline)
+
+Cell
+    - hasSnake()
+    - hasLadder()
+    - nextDirection
+
+Board
+    - size (rows x cols)
+
+Game
+    - State (active, paused, scheduled, finished)
+    - currentActivePlayer
+    - numberOfPlayers
+    - maxTimeLimit
+    - winner
+    - Map<Ladder | Snake>
+    - moveToNextPosition()
+    - leaderBoard()
+

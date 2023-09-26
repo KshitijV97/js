@@ -1,0 +1,5 @@
+1. Requirements
+2. Prioritization 
+3. HLD / Tech choices
+4. Interfaces
+5. Implementation / Component architecture

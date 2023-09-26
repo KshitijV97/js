@@ -1,0 +1,17 @@
+How to start game?
+
+Start from Cell 1
+
+Throw the dice and whatever number you get move on the number of cells on board
+
+How will you generate random number for dice?
+
+If you reach a cell that is base of ladder then you have to climb up that ladder without a dice throw
+
+If you reach a cell that is mouth of snake, you have to go down the tail of snake without a dice throw
+
+The game should continue till there are at least 2 players still playing to win
+
+Snakes and ladders do not create a cycle
+
+Player who reaches last cell first will be winner
