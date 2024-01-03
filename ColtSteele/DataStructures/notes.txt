@@ -1,0 +1,10 @@
+Data structures are collections of values, their relationships among them and the functions or operations that can be applied to the data
+
+Different data structures excel at different things
+
+What is a class?
+A blueprint for creating objects with pre defined properties and methods
+
+JS does not really have classes
+
+JS classes are syntactical sugar JS's existing prototype based inheritance 
