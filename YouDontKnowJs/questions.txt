@@ -1,0 +1,8 @@
+1. Is console.log(), fetch(), alert() a part of the JavaScript language?
+A. No they are not part of the JS specification. The behaviors behind them are controlled by the environment running the JS engine
+
+2. What is Babel? What is transpilation?
+A. A JavaScript snippet using ES2019 features wont work in an engine from 2016. For new and incompatible syntax, the solution is transpiling.
+Transpiling describes using a tool to convert the source code of a program from one form to another
+
+3. 
