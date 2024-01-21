@@ -70,3 +70,22 @@ function validAnagram(str1, str2) {
 	}
 	return true;
 }
+
+function isAnagram(s: string, t: string): boolean {
+    const lookup1: {[key: string]: number} = {}
+    const lookup2: {[key: string]: number} = {}
+    if(s.length !== t.length) return false;
+
+    for(let i = 0; i < s.length; i++){
+        lookup1[s[i]] ? lookup1[s[i]]++ : lookup1[s[i]] = 1;
+    }
+
+    for(let i = 0; i < s.length; i++){
+        lookup2[t[i]] ? lookup2[t[i]]++ : lookup2[t[i]] = 1;
+    }
+    for(let k of Object.keys(lookup1)){
+        if(lookup1[k] !== lookup2[k]) return false;
+    }
+    return true;
+};
+
