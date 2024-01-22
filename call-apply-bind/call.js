@@ -1,3 +1,4 @@
+// Below is basic example of call()
 const person = {
 	fullName: function () {
 		return this.firstname + ' ' + this.lastname;
