@@ -22,11 +22,29 @@ function sumZeroTwoPointers(arr) {
 	while (left < right) {
 		let sum = arr[left] + arr[right];
 		if (sum === 0) {
-			return [arr[i], arr[j]];
+			return [arr[left], arr[right]];
 		} else if (sum > 0) {
 			right--;
 		} else {
 			left++;
 		}
 	}
+}
+
+// Count unique values in sorted array using multiple pointers
+
+function countUniqueValues(arr) {
+	if (arr.length <= 1) return arr.length;
+	let uniqueValueCount = 1;
+	for (
+		let leftPointer = 0, rightPointer = 1;
+		rightPointer < arr.length;
+		rightPointer++
+	) {
+		if (arr[leftPointer] !== arr[rightPointer]) {
+			uniqueValueCount++;
+			leftPointer = rightPointer;
+		}
+	}
+	return uniqueValueCount;
 }
