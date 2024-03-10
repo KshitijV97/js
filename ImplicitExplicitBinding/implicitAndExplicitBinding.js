@@ -23,4 +23,5 @@ var obj3 = {
 	},
 };
 
+// This will print 'undefined'
 obj3.display.call(obj2);
