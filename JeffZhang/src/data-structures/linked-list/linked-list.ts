@@ -124,6 +124,14 @@ class LinkedList<T> {
 		}
 		return i;
 	}
+
+	contains(value: T, equalsFunction?: EqualsFunction<T>): boolean {
+		const index = this.indexOf(
+			value,
+			equalsFunction ? equalsFunction : undefined
+		);
+		return index !== -1;
+	}
 }
 
 export default LinkedList;
