@@ -132,6 +132,44 @@ class LinkedList<T> {
 		);
 		return index !== -1;
 	}
+
+	removeFront(): boolean {
+		if (!this.list) return false;
+
+		if (this.list.head.next) {
+			// Remove old head
+			this.list.head.next.prev = null;
+
+			// Update the head
+			this.list.head = this.list.head.next;
+
+			// Reduce size of list
+			this.list.size -= 1;
+		} else {
+			// Delete entire list
+			this.list = undefined;
+		}
+		return true;
+	}
+
+	removeBack(): boolean {
+		if (!this.list) return false;
+
+		if (this.list.tail.prev) {
+			// Remove old tail
+			this.list.tail.prev.next = null;
+
+			// Update the tail
+			this.list.tail = this.list.tail.prev;
+
+			// Reduce size of list
+			this.list.size -= 1;
+		} else {
+			// Delete entire list
+			this.list = undefined;
+		}
+		return true;
+	}
 }
 
 export default LinkedList;
