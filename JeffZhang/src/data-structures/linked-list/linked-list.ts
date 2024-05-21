@@ -170,6 +170,64 @@ class LinkedList<T> {
 		}
 		return true;
 	}
+
+	remove(val: T): boolean {
+		let index = this.indexOf(val);
+		if (index === -1) return false;
+		return this.removeAt(index);
+	}
+
+	removeAt(index: number): boolean {
+		// Underflow or Overflow
+		if (!this.list || index < 0 || index > this.list.size) {
+			return false;
+		}
+
+		// If delete at start or end
+		if (index === 0) return this.removeFront();
+		if (index === this.list.size - 1) return this.removeBack();
+
+		// Traverse to node to be deleted
+		let j = 0;
+		let curr = this.list.head;
+		while (j < index) {
+			curr = curr.next;
+			j += 1;
+		}
+
+		// Save current value if you want to return
+		const val = curr.val;
+
+		// Rearrange the pointers
+		curr.next.prev = curr.prev;
+		curr.prev.next = curr.next;
+
+		// Reduce size of list
+		this.list.size -= 1;
+
+		return true;
+	}
+
+	clear(): void {
+		this.list = undefined;
+	}
+
+	/** Append values to the linked list from an array */
+	fromArray(A: T[]): LinkedList<T> {
+		for (const a of A) {
+			this.addBack(a);
+		}
+		return this;
+	}
+
+	*[Symbol.iterator](): Iterator<T> {
+		if (!this.list) return;
+		let curr: LinkedListNode<T> | null;
+
+		for (curr = this.list.head; curr != null; curr = curr.next) {
+			yield curr.val;
+		}
+	}
 }
 
 export default LinkedList;
