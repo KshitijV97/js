@@ -1,0 +1,13 @@
+Stack and heap
+
+Array - Start to center
+
+Heap - End to center
+
+Storing whole arrays in stack frame does not make sense
+
+Stack frame does not change size
+
+Arrays are stored in Heap
+
+Variables in the stack frame can reference Objects and arrays in the heap and then those objects and ararys in the heap can in turn access other objects and ararys in the heap
