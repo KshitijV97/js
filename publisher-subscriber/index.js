@@ -10,6 +10,7 @@ const observer2 = function (item) {
 	console.log("moved", item);
 };
 
+
 const event = new MyEvent();
 
 // Subscribe the first observer to the event
@@ -19,3 +20,7 @@ event.fire("This is event 1");
 // Unsubscribe first observer
 event.unsubscribe(observer1);
 event.fire("This is event 2");
+
+event.subscribe(observer1);
+event.subscribe(observer2);
+event.fire("This is event 3")
