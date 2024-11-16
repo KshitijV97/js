@@ -65,6 +65,39 @@ class SinglyLinkedList {
     }
     return currentHead;
   }
+
+  unshift(value) {
+    var newNode = new Node();
+    if (this.head) {
+      newNode.next = this.head;
+      this.head = newNode;
+    } else {
+      this.head = newNode;
+      this.tail = newNode;
+    }
+    this.length++;
+    return this;
+  }
+
+  get(index) {
+    if (index > this.length) return undefined;
+
+    let current = this.head;
+    for (let i = 0; i < index; i++) {
+      current = current.next;
+    }
+
+    return current;
+  }
+
+  set(index, val) {
+    var foundNode = this.get(index);
+    if (foundNode) {
+      foundNode.val = val;
+      return true;
+    }
+    return false;
+  }
 }
 
 var list = new SinglyLinkedList();
@@ -76,3 +109,5 @@ list.push("4");
 list.traverse();
 console.log(list.pop());
 list.traverse();
+list.unshift("UNSHIFTING");
+list.get(3);
