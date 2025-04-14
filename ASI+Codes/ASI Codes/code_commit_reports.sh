@@ -41,51 +41,90 @@ echo "Repository,Committer Name,Committer Email,Commit Count" > "$OUTPUT_FILE"
 # Function to extract the repository name from the remote URL or directory name
 get_repo_name() {
     local repo_path=$1
+    
+    # Store current directory to return to it later
+    local original_dir=$(pwd)
+    
+    # Navigate to the repository directory
+    cd "$repo_path" || return 1
+    
     # Try to get the remote origin URL from Git configuration
-    local remote_url=$(cd "$repo_path" && git config --get remote.origin.url 2>/dev/null)
+    local remote_url=$(git config --get remote.origin.url 2>/dev/null)
+    local repo_name
     
     if [ -n "$remote_url" ]; then
         # If remote URL exists (string is not empty), extract the repository name from it
-        echo "$remote_url" | sed -E 's/.*\/([^\/]+)(\.git)?$/\1/'
+        repo_name=$(echo "$remote_url" | sed -E 's/.*\/([^\/]+)(\.git)?$/\1/')
     else
         # If there's no remote URL, use the directory name as the repository name
-        basename "$(cd "$repo_path" && pwd)"
+        repo_name=$(basename "$(pwd)")
     fi
+    
+    # Return to original directory
+    cd "$original_dir"
+    
+    # Output the repository name
+    echo "$repo_name"
 }
 
 # Function to analyze a single repository
 analyze_repository() {
     local repo_path=$1
+    local absolute_path
+    
+    # Convert to absolute path if it's relative
+    if [[ "$repo_path" = /* ]]; then
+        absolute_path="$repo_path"
+    else
+        absolute_path="$(pwd)/$repo_path"
+    fi
+    
+    # Show full path being analyzed
+    echo "Analyzing repository at path: $absolute_path"
     
     # Check if the provided path is actually a Git repository
-    if [ ! -d "$repo_path/.git" ] && [ ! -f "$repo_path/.git" ]; then
-        echo "Error: '$repo_path' is not a Git repository. Skipping."
+    if [ ! -d "$absolute_path/.git" ] && [ ! -f "$absolute_path/.git" ]; then
+        echo "Error: '$absolute_path' is not a Git repository. Skipping."
         return 1
     fi
     
-    # Change to the repository directory
-    cd "$repo_path" || { echo "Error: Could not change to repository directory '$repo_path'. Skipping."; return 1; }
+    # Get the repository name before changing directory
+    local repo_name=$(get_repo_name "$absolute_path")
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to get repository name for '$absolute_path'. Skipping."
+        return 1
+    fi
     
-    # Get the repository name
-    local repo_name=$(get_repo_name "$repo_path")
-    echo "Analyzing repository: $repo_name ($repo_path)"
+    echo "Repository name identified as: $repo_name"
+    
+    # Store current directory to return to it later
+    local original_dir=$(pwd)
+    
+    # Change to the repository directory
+    cd "$absolute_path" || { echo "Error: Could not change to repository directory '$absolute_path'. Skipping."; return 1; }
     
     # Verify the branch exists before trying to check it out
     if ! git show-ref --verify --quiet "refs/heads/$BRANCH"; then
         echo "Warning: Branch '$BRANCH' does not exist in repository '$repo_name'. Skipping."
+        cd "$original_dir"  # Return to original directory
         return 1
     fi
     
     # Checkout the branch we want to analyze (save current branch first)
     local current_branch=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse HEAD)
     echo "  Checking out branch: $BRANCH (current branch was: $current_branch)"
-    git checkout "$BRANCH" > /dev/null 2>&1 || { echo "  Error: Failed to checkout branch '$BRANCH'. Skipping."; git checkout "$current_branch" > /dev/null 2>&1; return 1; }
+    git checkout "$BRANCH" > /dev/null 2>&1 || { 
+        echo "  Error: Failed to checkout branch '$BRANCH'. Skipping."
+        git checkout "$current_branch" > /dev/null 2>&1
+        cd "$original_dir"  # Return to original directory
+        return 1
+    }
     
     # Prepare the git log parameters based on date range
     local git_date_param=""
     if [ "$DAYS_TO_ANALYZE" -gt 0 ]; then
         echo "  Analyzing commits from the last $DAYS_TO_ANALYZE days"
-        git_date_param="--since=\"$DAYS_TO_ANALYZE days ago\""
+        git_date_param="--since=$DAYS_TO_ANALYZE.days.ago"
     else
         echo "  Analyzing all commit history"
     fi
@@ -95,7 +134,7 @@ analyze_repository() {
     
     # Get all commits and extract author information
     echo "  Extracting commit information..."
-    eval "git log $git_date_param --pretty=format:'%H|%ae|%an' $BRANCH" > "$temp_dir/all_commits.txt"
+    git log $git_date_param --pretty=format:"%H|%ae|%an" $BRANCH > "$temp_dir/all_commits.txt"
     
     # Count total number of commits found
     local total_commits=$(wc -l < "$temp_dir/all_commits.txt")
@@ -107,6 +146,7 @@ analyze_repository() {
         # Go back to the original branch
         git checkout "$current_branch" > /dev/null 2>&1
         rm -rf "$temp_dir"
+        cd "$original_dir"  # Return to original directory
         return 0
     fi
     
@@ -145,11 +185,15 @@ analyze_repository() {
     # Go back to the original branch
     git checkout "$current_branch" > /dev/null 2>&1
     
+    # Return to original directory
+    cd "$original_dir"
+    
     return 0
 }
 
 # ===== Main Script =====
 echo "Starting multi-repository analysis for ${#REPO_PATHS[@]} repositories..."
+echo "Current working directory: $(pwd)"
 
 # Process each repository
 repo_count=0
@@ -159,16 +203,10 @@ for repo_path in "${REPO_PATHS[@]}"; do
     ((repo_count++))
     echo "[$repo_count/${#REPO_PATHS[@]}] Processing repository: $repo_path"
     
-    # Store current directory to return to it later
-    original_dir=$(pwd)
-    
     # Analyze the repository
     if analyze_repository "$repo_path"; then
         ((successful_repos++))
     fi
-    
-    # Return to original directory
-    cd "$original_dir"
     
     echo "----------------------------------------"
 done
