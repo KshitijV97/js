@@ -1,156 +1,194 @@
 #!/bin/bash
 
-# Monthly Git Commit Report Generator
-# This script analyzes a local Git repository and generates a CSV report
-# showing month-wise commit counts per committer for the specified time period.
+# Multi-Repository Git Commit Report Generator
+# This script analyzes multiple Git repositories and generates a combined CSV report
+# showing the number of commits per committer across all repositories.
 
 # ===== Configuration Variables (EDIT THESE) =====
-REPO_PATH="."                       # Path to the Git repository (default: current directory)
-OUTPUT_FILE="monthly_commit_report.csv"  # Output file name
-BRANCH="master"                     # Branch to analyze (default: master)
-DAYS_TO_ANALYZE=365                 # Number of days to analyze (default: 365 days)
+# Array of paths to Git repositories to analyze
+# Add as many repository paths as needed, separated by spaces
+REPO_PATHS=(
+    "/path/to/first/repo"
+    "/path/to/second/repo"
+    "/path/to/third/repo"
+    # Add more repositories as needed
+)
+# Alternatively, you can use the current directory as one of the paths:
+# REPO_PATHS=("." "/path/to/other/repo")
+
+# Name of the output CSV file that will be generated
+OUTPUT_FILE="combined_commit_report.csv"     
+# The Git branch that will be analyzed in each repository - defaults to master
+BRANCH="master"                     
+# Number of days to analyze - setting to 0 analyzes entire history
+DAYS_TO_ANALYZE=0
 
 # ===== Validation =====
-# Check for required tools
+# Check if the git command is available in the system
 command -v git >/dev/null 2>&1 || { echo "Error: git is required but not installed. Aborting."; exit 1; }
 
-# Check if the repository exists and is a git repository
-if [ ! -d "$REPO_PATH/.git" ] && [ ! -f "$REPO_PATH/.git" ]; then
-    echo "Error: '$REPO_PATH' is not a Git repository. Please provide a valid repository path."
+# Check if we have at least one repository path
+if [ ${#REPO_PATHS[@]} -eq 0 ]; then
+    echo "Error: No repository paths specified. Please configure REPO_PATHS array."
     exit 1
 fi
 
 # ===== Initialize CSV File =====
-echo "Repository,Committer Name,Committer Email,Year,Month,Commit Count" > "$OUTPUT_FILE"
+# Create the CSV file with a header row defining the column names
+echo "Repository,Committer Name,Committer Email,Commit Count" > "$OUTPUT_FILE"
 
 # ===== Helper Functions =====
+# Function to extract the repository name from the remote URL or directory name
 get_repo_name() {
-    # Extract repository name from remote URL or directory name
-    local remote_url=$(cd "$REPO_PATH" && git config --get remote.origin.url 2>/dev/null)
+    local repo_path=$1
+    # Try to get the remote origin URL from Git configuration
+    local remote_url=$(cd "$repo_path" && git config --get remote.origin.url 2>/dev/null)
     
     if [ -n "$remote_url" ]; then
-        # Extract repo name from remote URL
+        # If remote URL exists (string is not empty), extract the repository name from it
         echo "$remote_url" | sed -E 's/.*\/([^\/]+)(\.git)?$/\1/'
     else
-        # Use directory name as fallback
-        basename "$(cd "$REPO_PATH" && pwd)"
+        # If there's no remote URL, use the directory name as the repository name
+        basename "$(cd "$repo_path" && pwd)"
     fi
 }
 
-# Function to get month name from month number
-get_month_name() {
-    local month_num=$1
-    case $month_num in
-        01) echo "January" ;;
-        02) echo "February" ;;
-        03) echo "March" ;;
-        04) echo "April" ;;
-        05) echo "May" ;;
-        06) echo "June" ;;
-        07) echo "July" ;;
-        08) echo "August" ;;
-        09) echo "September" ;;
-        10) echo "October" ;;
-        11) echo "November" ;;
-        12) echo "December" ;;
-        *) echo "Unknown" ;;
-    esac
-}
-
-# ===== Main Script =====
-echo "Starting Git repository analysis..."
-
-# Change to repository directory
-cd "$REPO_PATH" || { echo "Error: Could not change to repository directory."; exit 1; }
-
-# Ensure we're on the specified branch
-echo "Checking out branch: $BRANCH"
-git checkout "$BRANCH" > /dev/null 2>&1 || { echo "Error: Failed to checkout branch '$BRANCH'. Aborting."; exit 1; }
-
-# Get repository name
-REPO_NAME=$(get_repo_name)
-echo "Analyzing repository: $REPO_NAME"
-
-# Prepare git log parameters based on date range
-if [ "$DAYS_TO_ANALYZE" -gt 0 ]; then
-    echo "Analyzing commits from the last $DAYS_TO_ANALYZE days"
-    DATE_FILTER="--since=$DAYS_TO_ANALYZE.days.ago"
-else
-    echo "Analyzing all commit history"
-    DATE_FILTER=""
-fi
-
-# Create a temporary directory for processing
-temp_dir=$(mktemp -d)
-
-# Get all commits with dates and extract author information
-echo "Extracting commit information with dates..."
-git log $DATE_FILTER --date=format:"%Y-%m" --pretty=format:"%H|%ae|%an|%ad" $BRANCH > "$temp_dir/all_commits.txt"
-
-total_commits=$(wc -l < "$temp_dir/all_commits.txt")
-echo "Found $total_commits total commits in the specified time period"
-
-# Get unique committers
-cut -d'|' -f2 "$temp_dir/all_commits.txt" | sort | uniq > "$temp_dir/committers.txt"
-committer_count=$(wc -l < "$temp_dir/committers.txt")
-echo "Found $committer_count unique committers"
-
-# Get unique year-month combinations in chronological order
-cut -d'|' -f4 "$temp_dir/all_commits.txt" | sort -u > "$temp_dir/months.txt"
-month_count=$(wc -l < "$temp_dir/months.txt")
-echo "Found $month_count unique months with commit activity"
-
-# Process each committer
-echo "Analyzing monthly commit statistics..."
-while read -r committer_email; do
-    if [ -z "$committer_email" ]; then
-        continue
+# Function to analyze a single repository
+analyze_repository() {
+    local repo_path=$1
+    
+    # Check if the provided path is actually a Git repository
+    if [ ! -d "$repo_path/.git" ] && [ ! -f "$repo_path/.git" ]; then
+        echo "Error: '$repo_path' is not a Git repository. Skipping."
+        return 1
     fi
     
-    # Get committer name
-    committer_name=$(grep "|$committer_email|" "$temp_dir/all_commits.txt" | head -1 | cut -d'|' -f3)
+    # Change to the repository directory
+    cd "$repo_path" || { echo "Error: Could not change to repository directory '$repo_path'. Skipping."; return 1; }
     
-    echo "  Processing committer: $committer_name"
+    # Get the repository name
+    local repo_name=$(get_repo_name "$repo_path")
+    echo "Analyzing repository: $repo_name ($repo_path)"
     
-    # Count commits per month for this committer
-    while read -r year_month; do
-        if [ -z "$year_month" ]; then
+    # Verify the branch exists before trying to check it out
+    if ! git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+        echo "Warning: Branch '$BRANCH' does not exist in repository '$repo_name'. Skipping."
+        return 1
+    fi
+    
+    # Checkout the branch we want to analyze (save current branch first)
+    local current_branch=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse HEAD)
+    echo "  Checking out branch: $BRANCH (current branch was: $current_branch)"
+    git checkout "$BRANCH" > /dev/null 2>&1 || { echo "  Error: Failed to checkout branch '$BRANCH'. Skipping."; git checkout "$current_branch" > /dev/null 2>&1; return 1; }
+    
+    # Prepare the git log parameters based on date range
+    local git_date_param=""
+    if [ "$DAYS_TO_ANALYZE" -gt 0 ]; then
+        echo "  Analyzing commits from the last $DAYS_TO_ANALYZE days"
+        git_date_param="--since=\"$DAYS_TO_ANALYZE days ago\""
+    else
+        echo "  Analyzing all commit history"
+    fi
+    
+    # Create a temporary directory to store intermediate files
+    local temp_dir=$(mktemp -d)
+    
+    # Get all commits and extract author information
+    echo "  Extracting commit information..."
+    eval "git log $git_date_param --pretty=format:'%H|%ae|%an' $BRANCH" > "$temp_dir/all_commits.txt"
+    
+    # Count total number of commits found
+    local total_commits=$(wc -l < "$temp_dir/all_commits.txt")
+    echo "  Found $total_commits total commits"
+    
+    # Skip further processing if no commits were found
+    if [ "$total_commits" -eq 0 ]; then
+        echo "  No commits found in specified time period. Skipping."
+        # Go back to the original branch
+        git checkout "$current_branch" > /dev/null 2>&1
+        rm -rf "$temp_dir"
+        return 0
+    fi
+    
+    # Extract unique committer email addresses
+    cut -d'|' -f2 "$temp_dir/all_commits.txt" | sort | uniq > "$temp_dir/committers.txt"
+    local committer_count=$(wc -l < "$temp_dir/committers.txt")
+    echo "  Found $committer_count unique committers"
+    
+    # Process each committer and generate statistics
+    echo "  Analyzing committer statistics..."
+    while read -r committer_email; do
+        # Skip empty lines if any
+        if [ -z "$committer_email" ]; then
             continue
         fi
         
-        # Parse year and month
-        year=$(echo "$year_month" | cut -d'-' -f1)
-        month=$(echo "$year_month" | cut -d'-' -f2)
-        month_name=$(get_month_name "$month")
+        # Get the committer's name
+        local committer_name=$(grep "|$committer_email|" "$temp_dir/all_commits.txt" | head -1 | cut -d'|' -f3)
         
-        # Count commits for this committer in this month
-        commit_count=$(grep "|$committer_email|.*|$year_month$" "$temp_dir/all_commits.txt" | wc -l)
+        # Count total commits for this committer
+        local commit_count=$(grep "|$committer_email|" "$temp_dir/all_commits.txt" | wc -l)
         
-        # Only add to CSV if there were commits in this month
-        if [ "$commit_count" -gt 0 ]; then
-            # Add to CSV report - properly escape values for CSV
-            name_escaped=$(echo "$committer_name" | sed 's/"/""/g')
-            email_escaped=$(echo "$committer_email" | sed 's/"/""/g')
-            echo "$REPO_NAME,\"$name_escaped\",\"$email_escaped\",$year,\"$month_name\",$commit_count" >> "$OUTPUT_FILE"
-        fi
+        # Add the committer's information to the CSV report
+        # Properly escape values for CSV format
+        local name_escaped=$(echo "$committer_name" | sed 's/"/""/g')
+        local email_escaped=$(echo "$committer_email" | sed 's/"/""/g')
+        echo "$repo_name,\"$name_escaped\",\"$email_escaped\",$commit_count" >> "$OUTPUT_FILE"
         
-    done < "$temp_dir/months.txt"
+        echo "    Processed committer: $committer_name ($commit_count commits)"
+        
+    done < "$temp_dir/committers.txt"
     
-done < "$temp_dir/committers.txt"
+    # Clean up temporary files
+    rm -rf "$temp_dir"
+    
+    # Go back to the original branch
+    git checkout "$current_branch" > /dev/null 2>&1
+    
+    return 0
+}
 
-# Clean up temporary files
-rm -rf "$temp_dir"
+# ===== Main Script =====
+echo "Starting multi-repository analysis for ${#REPO_PATHS[@]} repositories..."
 
-echo "Report generation complete!"
-echo "CSV report saved to: $OUTPUT_FILE"
+# Process each repository
+repo_count=0
+successful_repos=0
 
-# Optional: Show summary of months analyzed
-echo "Time period analyzed: Last $DAYS_TO_ANALYZE days, covering months:"
-cut -d',' -f4,5 "$OUTPUT_FILE" | sort -u | tail -n +2 | while read -r year_month; do
-    echo "  $year_month"
+for repo_path in "${REPO_PATHS[@]}"; do
+    ((repo_count++))
+    echo "[$repo_count/${#REPO_PATHS[@]}] Processing repository: $repo_path"
+    
+    # Store current directory to return to it later
+    original_dir=$(pwd)
+    
+    # Analyze the repository
+    if analyze_repository "$repo_path"; then
+        ((successful_repos++))
+    fi
+    
+    # Return to original directory
+    cd "$original_dir"
+    
+    echo "----------------------------------------"
 done
 
-# Optional: Display a sample of the report
-echo "Report sample (first 10 entries):"
-echo "--------------------------------"
-head -n 11 "$OUTPUT_FILE" | column -t -s ','
+echo "Report generation complete!"
+echo "Successfully analyzed $successful_repos out of ${#REPO_PATHS[@]} repositories."
+echo "CSV report saved to: $OUTPUT_FILE"
+
+# Only show the report if at least one repository was successfully analyzed
+if [ $successful_repos -gt 0 ]; then
+    # Count total committers and commits across all repositories
+    total_commits=$(tail -n +2 "$OUTPUT_FILE" | awk -F, '{sum+=$4} END {print sum}')
+    total_committers=$(tail -n +2 "$OUTPUT_FILE" | awk -F, '{print $3}' | sort | uniq | wc -l)
+    
+    echo "Overall statistics:"
+    echo "  Total unique committers: $total_committers"
+    echo "  Total commits: $total_commits"
+    
+    # Display a preview of the report
+    echo "Report preview (first 10 entries):"
+    echo "----------------------------------------"
+    head -n 11 "$OUTPUT_FILE" | column -t -s ','
+fi
