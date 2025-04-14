@@ -1,15 +1,14 @@
 #!/bin/bash
 
-# Git Master Branch Commit Report Generator
+# Monthly Git Commit Report Generator
 # This script analyzes a local Git repository and generates a CSV report
-# showing the number of commits per committer on the master branch.
+# showing month-wise commit counts per committer for the specified time period.
 
 # ===== Configuration Variables (EDIT THESE) =====
 REPO_PATH="."                       # Path to the Git repository (default: current directory)
-OUTPUT_FILE="commit_report.csv"     # Output file name
+OUTPUT_FILE="monthly_commit_report.csv"  # Output file name
 BRANCH="master"                     # Branch to analyze (default: master)
-# Number of days to analyze (0 = all history)
-DAYS_TO_ANALYZE=0
+DAYS_TO_ANALYZE=365                 # Number of days to analyze (default: 365 days)
 
 # ===== Validation =====
 # Check for required tools
@@ -22,7 +21,7 @@ if [ ! -d "$REPO_PATH/.git" ] && [ ! -f "$REPO_PATH/.git" ]; then
 fi
 
 # ===== Initialize CSV File =====
-echo "Repository,Committer Name,Committer Email,Commit Count" > "$OUTPUT_FILE"
+echo "Repository,Committer Name,Committer Email,Year,Month,Commit Count" > "$OUTPUT_FILE"
 
 # ===== Helper Functions =====
 get_repo_name() {
@@ -36,6 +35,26 @@ get_repo_name() {
         # Use directory name as fallback
         basename "$(cd "$REPO_PATH" && pwd)"
     fi
+}
+
+# Function to get month name from month number
+get_month_name() {
+    local month_num=$1
+    case $month_num in
+        01) echo "January" ;;
+        02) echo "February" ;;
+        03) echo "March" ;;
+        04) echo "April" ;;
+        05) echo "May" ;;
+        06) echo "June" ;;
+        07) echo "July" ;;
+        08) echo "August" ;;
+        09) echo "September" ;;
+        10) echo "October" ;;
+        11) echo "November" ;;
+        12) echo "December" ;;
+        *) echo "Unknown" ;;
+    esac
 }
 
 # ===== Main Script =====
@@ -53,31 +72,36 @@ REPO_NAME=$(get_repo_name)
 echo "Analyzing repository: $REPO_NAME"
 
 # Prepare git log parameters based on date range
-GIT_DATE_PARAM=""
 if [ "$DAYS_TO_ANALYZE" -gt 0 ]; then
     echo "Analyzing commits from the last $DAYS_TO_ANALYZE days"
-    GIT_DATE_PARAM="--since=\"$DAYS_TO_ANALYZE days ago\""
+    DATE_FILTER="--since=$DAYS_TO_ANALYZE.days.ago"
 else
     echo "Analyzing all commit history"
+    DATE_FILTER=""
 fi
 
 # Create a temporary directory for processing
 temp_dir=$(mktemp -d)
 
-# Get all commits and extract author information
-echo "Extracting commit information..."
-eval "git log $GIT_DATE_PARAM --pretty=format:'%H|%ae|%an' $BRANCH" > "$temp_dir/all_commits.txt"
+# Get all commits with dates and extract author information
+echo "Extracting commit information with dates..."
+git log $DATE_FILTER --date=format:"%Y-%m" --pretty=format:"%H|%ae|%an|%ad" $BRANCH > "$temp_dir/all_commits.txt"
 
 total_commits=$(wc -l < "$temp_dir/all_commits.txt")
-echo "Found $total_commits total commits"
+echo "Found $total_commits total commits in the specified time period"
 
 # Get unique committers
 cut -d'|' -f2 "$temp_dir/all_commits.txt" | sort | uniq > "$temp_dir/committers.txt"
 committer_count=$(wc -l < "$temp_dir/committers.txt")
 echo "Found $committer_count unique committers"
 
+# Get unique year-month combinations in chronological order
+cut -d'|' -f4 "$temp_dir/all_commits.txt" | sort -u > "$temp_dir/months.txt"
+month_count=$(wc -l < "$temp_dir/months.txt")
+echo "Found $month_count unique months with commit activity"
+
 # Process each committer
-echo "Analyzing committer statistics..."
+echo "Analyzing monthly commit statistics..."
 while read -r committer_email; do
     if [ -z "$committer_email" ]; then
         continue
@@ -86,15 +110,31 @@ while read -r committer_email; do
     # Get committer name
     committer_name=$(grep "|$committer_email|" "$temp_dir/all_commits.txt" | head -1 | cut -d'|' -f3)
     
-    # Count total commits for this committer
-    commit_count=$(grep "|$committer_email|" "$temp_dir/all_commits.txt" | wc -l)
+    echo "  Processing committer: $committer_name"
     
-    # Add to CSV report - properly escape values for CSV
-    name_escaped=$(echo "$committer_name" | sed 's/"/""/g')
-    email_escaped=$(echo "$committer_email" | sed 's/"/""/g')
-    echo "$REPO_NAME,\"$name_escaped\",\"$email_escaped\",$commit_count" >> "$OUTPUT_FILE"
-    
-    echo "  Processed committer: $committer_name ($commit_count commits)"
+    # Count commits per month for this committer
+    while read -r year_month; do
+        if [ -z "$year_month" ]; then
+            continue
+        fi
+        
+        # Parse year and month
+        year=$(echo "$year_month" | cut -d'-' -f1)
+        month=$(echo "$year_month" | cut -d'-' -f2)
+        month_name=$(get_month_name "$month")
+        
+        # Count commits for this committer in this month
+        commit_count=$(grep "|$committer_email|.*|$year_month$" "$temp_dir/all_commits.txt" | wc -l)
+        
+        # Only add to CSV if there were commits in this month
+        if [ "$commit_count" -gt 0 ]; then
+            # Add to CSV report - properly escape values for CSV
+            name_escaped=$(echo "$committer_name" | sed 's/"/""/g')
+            email_escaped=$(echo "$committer_email" | sed 's/"/""/g')
+            echo "$REPO_NAME,\"$name_escaped\",\"$email_escaped\",$year,\"$month_name\",$commit_count" >> "$OUTPUT_FILE"
+        fi
+        
+    done < "$temp_dir/months.txt"
     
 done < "$temp_dir/committers.txt"
 
@@ -104,7 +144,13 @@ rm -rf "$temp_dir"
 echo "Report generation complete!"
 echo "CSV report saved to: $OUTPUT_FILE"
 
-# Optional: Display the report
-echo "Report preview:"
-echo "----------------"
-cat "$OUTPUT_FILE" | column -t -s ','
+# Optional: Show summary of months analyzed
+echo "Time period analyzed: Last $DAYS_TO_ANALYZE days, covering months:"
+cut -d',' -f4,5 "$OUTPUT_FILE" | sort -u | tail -n +2 | while read -r year_month; do
+    echo "  $year_month"
+done
+
+# Optional: Display a sample of the report
+echo "Report sample (first 10 entries):"
+echo "--------------------------------"
+head -n 11 "$OUTPUT_FILE" | column -t -s ','
