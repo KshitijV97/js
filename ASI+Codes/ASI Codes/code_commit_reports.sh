@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Completely Rewritten Multi-Repository Git Commit Report Generator
+# Fixed Multi-Repository Git Commit Report Generator
 # This script analyzes multiple Git repositories and generates a combined CSV report
 # showing the number of commits per committer across all repositories.
 
@@ -13,12 +13,52 @@ REPO_PATHS=(
     # Add more repositories as needed
 )
 
-# Name of the output CSV file that will be generated
-OUTPUT_FILE="combined_commit_report.csv"     
+# Set the output file to be an absolute path in the current directory
+# This ensures we know exactly where the file is being written
+CURRENT_DIR="$(pwd)"
+OUTPUT_FILE="$CURRENT_DIR/combined_commit_report.csv"     
 # The Git branch that will be analyzed in each repository - defaults to master
 BRANCH="master"                     
 # Number of days to analyze - setting to 0 analyzes entire history
 DAYS_TO_ANALYZE=0
+# Set to true for additional debugging information
+DEBUG=true
+
+# ===== Helper Functions =====
+# Function to print debug information
+debug_print() {
+    if [ "$DEBUG" = true ]; then
+        echo "[DEBUG] $1"
+    fi
+}
+
+# Function to log write operations to the CSV file
+log_write() {
+    local content="$1"
+    local operation="$2"
+    
+    debug_print "Writing to $OUTPUT_FILE ($operation): $content"
+    
+    if [ "$operation" = "create" ]; then
+        echo "$content" > "$OUTPUT_FILE"
+    else
+        echo "$content" >> "$OUTPUT_FILE"
+    fi
+    
+    # Verify write operation
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to write to $OUTPUT_FILE"
+        return 1
+    fi
+    
+    # Verify file exists and has content
+    if [ ! -f "$OUTPUT_FILE" ]; then
+        echo "Error: $OUTPUT_FILE does not exist after write operation"
+        return 1
+    fi
+    
+    return 0
+}
 
 # ===== Basic Validation =====
 # Check if git is installed
@@ -33,8 +73,22 @@ if [ ${#REPO_PATHS[@]} -eq 0 ]; then
     exit 1
 fi
 
+# Check if we can write to the output directory
+if [ ! -w "$(dirname "$OUTPUT_FILE")" ]; then
+    echo "Error: Cannot write to output directory $(dirname "$OUTPUT_FILE"). Aborting."
+    exit 1
+fi
+
 # ===== Initialize CSV File =====
-echo "Repository,Committer Name,Committer Email,Commit Count" > "$OUTPUT_FILE"
+echo "Creating output file at: $OUTPUT_FILE"
+log_write "Repository,Committer Name,Committer Email,Commit Count" "create"
+
+if [ ! -f "$OUTPUT_FILE" ]; then
+    echo "ERROR: Failed to create the output file. Please check permissions and path."
+    exit 1
+else
+    echo "CSV file initialized successfully."
+fi
 
 # ===== Main Script =====
 echo "Starting multi-repository analysis..."
@@ -45,6 +99,7 @@ done
 
 # Track the original directory to always return to it
 ORIGINAL_DIR="$(pwd)"
+debug_print "Original directory: $ORIGINAL_DIR"
 
 # Variables to track progress
 successful_repos=0
@@ -58,6 +113,7 @@ for ((i=0; i<${#REPO_PATHS[@]}; i++)); do
     
     # Make sure we start from the original directory
     cd "$ORIGINAL_DIR" || { echo "Error: Could not return to original directory. Aborting."; exit 1; }
+    debug_print "Returned to original directory: $(pwd)"
     
     # Verify repo path exists
     if [ ! -d "$repo_path" ]; then
@@ -67,6 +123,7 @@ for ((i=0; i<${#REPO_PATHS[@]}; i++)); do
     
     # Navigate to the repository
     cd "$repo_path" || { echo "  Error: Could not change to repository directory. Skipping."; continue; }
+    debug_print "Changed to repository directory: $(pwd)"
     
     # Verify this is a git repository
     if [ ! -d ".git" ] && [ ! -f ".git" ]; then
@@ -107,6 +164,7 @@ for ((i=0; i<${#REPO_PATHS[@]}; i++)); do
     
     # Create a temporary directory for this repository's data
     temp_dir=$(mktemp -d)
+    debug_print "Created temporary directory: $temp_dir"
     
     # Prepare git log command based on date range
     git_log_cmd="git log"
@@ -120,6 +178,14 @@ for ((i=0; i<${#REPO_PATHS[@]}; i++)); do
     # Get commit information
     echo "  Extracting commit information..."
     $git_log_cmd --pretty=format:"%H|%ae|%an" "$BRANCH" > "$temp_dir/all_commits.txt"
+    
+    # Verify commit data was extracted
+    if [ ! -f "$temp_dir/all_commits.txt" ]; then
+        echo "  Error: Failed to extract commit information. Skipping."
+        rm -rf "$temp_dir"
+        git checkout "$current_branch" &> /dev/null
+        continue
+    fi
     
     # Count total commits
     total_commits=$(wc -l < "$temp_dir/all_commits.txt")
@@ -140,6 +206,8 @@ for ((i=0; i<${#REPO_PATHS[@]}; i++)); do
     
     # Process each committer
     echo "  Processing committer statistics..."
+    commit_data_added=0
+    
     while read -r committer_email; do
         if [ -z "$committer_email" ]; then
             continue
@@ -156,13 +224,21 @@ for ((i=0; i<${#REPO_PATHS[@]}; i++)); do
         email_escaped=$(echo "$committer_email" | sed 's/"/""/g')
         
         # Add to CSV report
-        echo "$repo_name,\"$name_escaped\",\"$email_escaped\",$commit_count" >> "$OUTPUT_FILE"
+        csv_line="$repo_name,\"$name_escaped\",\"$email_escaped\",$commit_count"
+        if log_write "$csv_line" "append"; then
+            ((commit_data_added++))
+        else
+            echo "    Warning: Failed to write committer data to CSV"
+        fi
         
         echo "    Processed committer: $committer_name ($commit_count commits)"
     done < "$temp_dir/committers.txt"
     
+    echo "  Added $commit_data_added committer records to CSV file"
+    
     # Clean up
     rm -rf "$temp_dir"
+    debug_print "Removed temporary directory"
     
     # Restore original branch
     echo "  Restoring original branch: $current_branch"
@@ -177,26 +253,43 @@ done
 
 # Always return to original directory
 cd "$ORIGINAL_DIR"
+debug_print "Returned to original directory: $(pwd)"
 
 echo ""
 echo "Report generation complete!"
 echo "Successfully analyzed $successful_repos out of $total_repos repositories."
 echo "CSV report saved to: $OUTPUT_FILE"
 
-# Display summary if any repositories were analyzed
-if [ $successful_repos -gt 0 ]; then
-    # Count total committers and commits
-    total_commits=$(tail -n +2 "$OUTPUT_FILE" | awk -F, '{sum+=$4} END {print sum}')
-    total_committers=$(tail -n +2 "$OUTPUT_FILE" | awk -F, '{print $3}' | sort | uniq | wc -l)
+# Check if the output file exists and has content
+if [ -f "$OUTPUT_FILE" ]; then
+    file_size=$(wc -c < "$OUTPUT_FILE")
+    line_count=$(wc -l < "$OUTPUT_FILE")
+    echo "Output file details:"
+    echo "  Path: $OUTPUT_FILE"
+    echo "  Size: $file_size bytes"
+    echo "  Lines: $line_count"
     
-    echo ""
-    echo "Overall statistics:"
-    echo "  Total unique committers: $total_committers"
-    echo "  Total commits: $total_commits"
-    
-    # Display a preview of the report
-    echo ""
-    echo "Report preview (first 10 entries):"
-    echo "----------------------------------------"
-    head -n 11 "$OUTPUT_FILE" | column -t -s ','
+    if [ "$line_count" -le 1 ]; then
+        echo "WARNING: Output file only contains the header line. No commit data was written."
+    else
+        # Display summary if any repositories were analyzed
+        if [ $successful_repos -gt 0 ]; then
+            # Count total committers and commits
+            total_commits=$(tail -n +2 "$OUTPUT_FILE" | awk -F, '{sum+=$4} END {print sum}')
+            total_committers=$(tail -n +2 "$OUTPUT_FILE" | awk -F, '{print $3}' | sort | uniq | wc -l)
+            
+            echo ""
+            echo "Overall statistics:"
+            echo "  Total unique committers: $total_committers"
+            echo "  Total commits: $total_commits"
+            
+            # Display a preview of the report
+            echo ""
+            echo "Report preview (first 10 entries):"
+            echo "----------------------------------------"
+            head -n 11 "$OUTPUT_FILE" | column -t -s ','
+        fi
+    fi
+else
+    echo "ERROR: Output file does not exist at $OUTPUT_FILE"
 fi
