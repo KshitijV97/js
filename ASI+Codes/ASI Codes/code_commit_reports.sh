@@ -1,26 +1,13 @@
 #!/bin/bash
 
-# Local Git Repository Commit Report Generator
+# Git Master Branch Commit Report Generator
 # This script analyzes a local Git repository and generates a CSV report
-# showing committer statistics and peer review information.
-#
-# The report includes:
-#  - Number of code committers
-#  - Commits per committer
-#  - Estimated peer review status based on merge patterns
+# showing the number of commits per committer on the master branch.
 
 # ===== Configuration Variables (EDIT THESE) =====
 REPO_PATH="."                       # Path to the Git repository (default: current directory)
 OUTPUT_FILE="commit_report.csv"     # Output file name
 BRANCH="master"                     # Branch to analyze (default: master)
-# Define patterns that indicate a commit went through peer review
-# You can add more patterns specific to your team's workflow
-REVIEW_PATTERNS=(
-  "Merge pull request"
-  "Reviewed-by:"
-  "PR:"
-  "Pull request"
-)
 # Number of days to analyze (0 = all history)
 DAYS_TO_ANALYZE=0
 
@@ -35,7 +22,7 @@ if [ ! -d "$REPO_PATH/.git" ] && [ ! -f "$REPO_PATH/.git" ]; then
 fi
 
 # ===== Initialize CSV File =====
-echo "Repository,Committer Name,Committer Email,Commit Count,Peer Reviewed Commits,Peer Review Percentage" > "$OUTPUT_FILE"
+echo "Repository,Committer Name,Committer Email,Commit Count" > "$OUTPUT_FILE"
 
 # ===== Helper Functions =====
 get_repo_name() {
@@ -49,27 +36,6 @@ get_repo_name() {
         # Use directory name as fallback
         basename "$(cd "$REPO_PATH" && pwd)"
     fi
-}
-
-# Check if a commit has indications of peer review
-is_reviewed_commit() {
-    local commit_hash=$1
-    local commit_msg=$(cd "$REPO_PATH" && git log -1 --pretty=format:"%B" "$commit_hash")
-    
-    # Check if commit is a merge commit
-    local is_merge=$(cd "$REPO_PATH" && git rev-list --merges -n 1 "$commit_hash" 2>/dev/null)
-    if [ -n "$is_merge" ]; then
-        return 0 # True, it's a merge commit
-    fi
-    
-    # Check if commit message contains any review patterns
-    for pattern in "${REVIEW_PATTERNS[@]}"; do
-        if echo "$commit_msg" | grep -q "$pattern"; then
-            return 0 # True, found a review pattern
-        fi
-    done
-    
-    return 1 # False, no evidence of review
 }
 
 # ===== Main Script =====
@@ -123,33 +89,12 @@ while read -r committer_email; do
     # Count total commits for this committer
     commit_count=$(grep "|$committer_email|" "$temp_dir/all_commits.txt" | wc -l)
     
-    # Count peer-reviewed commits
-    reviewed_count=0
-    
-    # For each commit by this committer, check if it was reviewed
-    grep "|$committer_email|" "$temp_dir/all_commits.txt" | cut -d'|' -f1 | while read -r commit_hash; do
-        if is_reviewed_commit "$commit_hash"; then
-            # Create a marker file for each reviewed commit
-            touch "$temp_dir/reviewed_$commit_hash"
-        fi
-    done
-    
-    # Count the marker files to get the number of reviewed commits
-    reviewed_count=$(ls -1 "$temp_dir/reviewed_"* 2>/dev/null | wc -l)
-    
-    # Calculate peer review percentage
-    if [ "$commit_count" -gt 0 ]; then
-        review_percentage=$(awk "BEGIN { printf \"%.2f\", ($reviewed_count / $commit_count) * 100 }")
-    else
-        review_percentage="0.00"
-    fi
-    
     # Add to CSV report - properly escape values for CSV
     name_escaped=$(echo "$committer_name" | sed 's/"/""/g')
     email_escaped=$(echo "$committer_email" | sed 's/"/""/g')
-    echo "$REPO_NAME,\"$name_escaped\",\"$email_escaped\",$commit_count,$reviewed_count,$review_percentage%" >> "$OUTPUT_FILE"
+    echo "$REPO_NAME,\"$name_escaped\",\"$email_escaped\",$commit_count" >> "$OUTPUT_FILE"
     
-    echo "  Processed committer: $committer_name ($commit_count commits, $reviewed_count reviewed)"
+    echo "  Processed committer: $committer_name ($commit_count commits)"
     
 done < "$temp_dir/committers.txt"
 
